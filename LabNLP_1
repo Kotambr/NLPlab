@@ -1,0 +1,53 @@
+import requests
+import re
+import matplotlib.pyplot as plt
+from collections import Counter
+
+def process_book(url):
+    response = requests.get(url)
+    text = response.text
+
+    text = re.sub(r'\s+', ' ', text)  
+    text = text.lower()
+    text = re.sub(r"\bit's\b", "it is", text)
+    text = re.sub(r"\bcan't\b", "cannot", text)
+    text = re.sub(r"\bwon't\b", "will not", text)
+    text = re.sub(r"\bdon't\b", "do not", text)
+
+    words = re.findall(r'\b\w+\b', text)
+    return words
+
+def plot_word_distribution(word_counts, book_title):
+    words, counts = zip(*word_counts)  # Распаковываем кортежи в два списка
+    plt.figure(figsize=(10, 5))
+    plt.bar(words, counts)
+    plt.title(f'Частота слов в текстах {book_title}')
+    plt.xlabel('Слова')
+    plt.ylabel('Частота')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
+book_urls =  [
+    'https://www.gutenberg.org/cache/epub/67979/pg67979.txt',
+    'https://www.gutenberg.org/cache/epub/75342/pg75342.txt',
+    'https://www.gutenberg.org/cache/epub/75343/pg75343.txt'
+]
+
+stop_words = set(['the', 'and', 'in', 'to', 'of', 'a', 'is', 'it', 'that', 'was', 'he', 'she', 'for', 'on', 'with', 'as', 'by', 'at', 'an', 'be', 'this', 'which', 'or', 'but', 'not'])
+
+all_books_word_counts = []
+
+for url in book_urls:
+    words = process_book(url)
+    filtered_words = [word for word in words if word not in stop_words]
+    word_counts = Counter(filtered_words)
+    all_books_word_counts.append(word_counts)
+
+    plot_word_distribution(word_counts.most_common(10), url)
+
+for index, word_counts in enumerate(all_books_word_counts):
+    print(f"Топ 10 аниме вайфу {index + 1}:")
+    for word, count in word_counts.most_common(10):
+        print(f"{word}: {count}")
+    print("\n")
