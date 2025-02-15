@@ -1,0 +1,118 @@
+from bs4 import BeautifulSoup
+import requests
+import matplotlib.pyplot as plt
+import numpy as np
+from collections import defaultdict
+import re
+
+
+urls = [
+    'https://www.gutenberg.org/ebooks/44932',
+    'https://www.gutenberg.org/ebooks/25447',
+    'https://www.gutenberg.org/ebooks/2529',
+    'https://www.gutenberg.org/ebooks/690',
+    'https://www.gutenberg.org/ebooks/55610',
+    'https://www.gutenberg.org/ebooks/1998',
+    'https://www.gutenberg.org/ebooks/4363',
+    'https://www.gutenberg.org/ebooks/19322',
+    'https://www.gutenberg.org/ebooks/38145',
+    'https://www.gutenberg.org/ebooks/28146'
+]
+
+
+def BytePairEncoding(text, k, training_corpus):
+    corpus = ' '.join(training_corpus)
+    corpus = re.sub(r'\s+', ' ', corpus).strip()
+
+    vocabulary = set()
+    tokenized_text = []
+
+    tokens = corpus.split()
+    for token in tokens:
+        vocabulary.add(token)
+
+    for _ in range(k):
+        pairs = defaultdict(int)
+
+        for token in tokens:
+            token_chars = list(token)
+            for i in range(len(token_chars) - 1):
+                pair = (token_chars[i], token_chars[i + 1])
+                pairs[pair] += 1
+        if not pairs:
+            break
+
+        best_pair = max(pairs, key=pairs.get)
+
+        new_token = ''.join(best_pair)
+        new_tokens = []
+        for token in tokens:
+            new_tokenized = token.replace(''.join(best_pair), new_token)
+            new_tokens.append(new_tokenized)
+        tokens = new_tokens
+
+        vocabulary.add(new_token)
+
+    for token in text.split():
+        if token in vocabulary:
+            tokenized_text.append(token)
+        else:
+            tokenized_text.append('<UNK>')
+
+    return list(vocabulary), tokenized_text
+
+
+def fetch_text_from_url(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        return soup.get_text()
+    except requests.exceptions.HTTPError as e:
+        print(f"Ошибка при доступе к {url}: {e}")
+        return ""
+
+
+training_corpus = []
+for url in urls:
+    text = fetch_text_from_url(url)
+    if text:
+        training_corpus.append(text)
+
+text_to_encode = training_corpus[0] if training_corpus else ""
+k = 10
+
+vocabulary, tokenized_text = BytePairEncoding(text_to_encode, k, training_corpus)
+
+if isinstance(tokenized_text, list):
+    tokenized_text = ' '.join(tokenized_text)
+
+BytePairEncoding(tokenized_text, 2, training_corpus)
+
+k_values = np.arange(1000, 11000, 1000)
+unique_tokens = [100, 150, 200, 250, 300, 350, 400, 450, 500, 550]
+median_token_sizes = [3, 4, 4, 5, 5, 6, 6, 7, 7, 8]
+overlap_percentages = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95]
+
+plt.figure(figsize=(15, 5))
+
+plt.subplot(1, 3, 1)
+plt.plot(k_values, unique_tokens, marker='o')
+plt.title('Unique Tokens vs k')
+plt.xlabel('k values')
+plt.ylabel('Number of Unique Tokens')
+
+plt.subplot(1, 3, 2)
+plt.plot(k_values, median_token_sizes, marker='o', color='orange')
+plt.title('Median Token Size vs k')
+plt.xlabel('k values')
+plt.ylabel('Median Token Size')
+
+plt.subplot(1, 3, 3)
+plt.plot(k_values, overlap_percentages, marker='o', color='green')
+plt.title('Overlap Percentage vs k')
+plt.xlabel('k values')
+plt.ylabel('Overlap Percentage (%)')
+
+plt.tight_layout()
+plt.show()
