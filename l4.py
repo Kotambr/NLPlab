@@ -37,16 +37,21 @@ def laplace_smoothing(model, vocab_size):
     return model
 
 def get_text_from_url(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-    text = soup.get_text()
-    start = text.find("*** START OF THIS PROJECT GUTENBERG EBOOK")
-    end = text.find("*** END OF THIS PROJECT GUTENBERG EBOOK")
-    if start != -1 and end != -1:
-        text = text[start:end]
-    return text
+    try:
+        response = requests.get(url)
+        response.raise_for_status() 
+        soup = BeautifulSoup(response.content, 'html.parser')
+        text = soup.get_text()
+        start = text.find("*** START OF THIS PROJECT GUTENBERG EBOOK")
+        end = text.find("*** END OF THIS PROJECT GUTENBERG EBOOK")
+        if start != -1 and end != -1:
+            text = text[start:end]
+        return text
+    except requests.RequestException as e:
+        print(f"Ошибка при получении текста: {e}")
+        return ""
 
-#  Ницше и Рассел
+#Ницше и Рассела
 nietzsche_url = 'https://www.gutenberg.org/cache/epub/67979/pg67979.txt'
 russell_url = 'https://www.gutenberg.org/cache/epub/75342/pg75342.txt'
 
@@ -62,8 +67,8 @@ nietzsche_model = laplace_smoothing(nietzsche_model, vocab_size)
 russell_model = laplace_smoothing(russell_model, vocab_size)
 
 # Генерация диалога
-seed = ('the', 'first', 'trigram')
-for _ in range(2):
+seed = ('the', 'a', 'once')
+for _ in range(1):
     nietzsche_sentence = generate_sentence(nietzsche_model, seed)
     print("Nietzsche:", nietzsche_sentence)
     seed = tuple(nietzsche_sentence.split()[-3:])
@@ -71,3 +76,12 @@ for _ in range(2):
     russell_sentence = generate_sentence(russell_model, seed)
     print("Russell:", russell_sentence)
     seed = tuple(russell_sentence.split()[-3:])
+
+    '''
+Nietzsche: the a once the first time it was valancy trying to explain but i m really quite a different kind of present to the north wind good luck was so shabby nobody but olive working off by heart was barney that s all right as long as you thought you kept
+Russell: thought you kept to the trail moved down to a halt wolves cried jack sure enough there was nothing compared to what he wanted a round stone weighing all of the hut that was left in a patch of woods hardly had he heard a low growl made him ugly what
+    '''
+    '''
+Nietzsche: the a once i if it were very commonplace but she did not interfere with her back that had to speak my cats are most dangerous animals said mrs frederick go up to me you wouldn t bury himself for five years that he has done you re still young said uncle wellington
+Russell: said uncle wellington store somebody it even monday air best for of madly be did animal youth night covered lots companions stomach so harry be careful we must put on steam and went sailing on winner by ten yards while dixon came in sight boxy especially when the pretty animal there
+    '''
