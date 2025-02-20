@@ -1,4 +1,16 @@
 import numpy as np
+import requests
+from bs4 import BeautifulSoup
+
+def get_text_from_url(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    text = soup.get_text()
+    start = text.find("*** START OF THIS PROJECT GUTENBERG EBOOK")
+    end = text.find("*** END OF THIS PROJECT GUTENBERG EBOOK")
+    if start != -1 and end != -1:
+        text = text[start:end]
+    return text
 
 def levenshteinDistanceDP(token1, token2):
     distances = np.zeros((len(token1) + 1, len(token2) + 1))
@@ -29,7 +41,6 @@ def levenshteinDistanceDP(token1, token2):
                 distances[t1][t2] = min(a + cost, b + cost, c + cost)
 
     return distances[len(token1)][len(token2)]
-
-# Пример использования и вывод результатов
-result = levenshteinDistanceDP('test  ', 'test')
+text = get_text_from_url('https://www.gutenberg.org/cache/epub/14741/pg14741-images.html')
+result = levenshteinDistanceDP(text[100:200], text[300:400])
 print(result)
