@@ -1,0 +1,106 @@
+import re
+import requests
+from bs4 import BeautifulSoup
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score
+import matplotlib.pyplot as plt
+import numpy as np
+import nltk
+from nltk.corpus import sentiwordnet as swn
+from nltk.corpus import wordnet
+
+# Загрузка ресурса sentiwordnet
+nltk.download('sentiwordnet')
+nltk.download('wordnet')
+
+def tokenize(text):
+    return re.findall(r'\b\w+\b', text.lower())
+
+def get_sentiment(word):
+    synsets = list(swn.senti_synsets(word))
+    if not synsets:
+        return 0
+    synset = synsets[0]
+    return synset.pos_score() - synset.neg_score()
+
+def calculate_sentence_sentiment(sentence):
+    words = tokenize(sentence)
+    if not words:
+        return 0
+    sentiment = sum(get_sentiment(word) for word in words) / len(words)
+    return sentiment
+
+def get_text_from_url(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status() 
+        soup = BeautifulSoup(response.content, 'html.parser')
+        text = soup.get_text()
+        start = text.find("*** START OF THIS PROJECT GUTENBERG EBOOK")
+        end = text.find("*** END OF THIS PROJECT GUTENBERG EBOOK")
+        if start != -1 and end != -1:
+            text = text[start:end]
+        return text
+    except requests.RequestException as e:
+        print(f"Ошибка при получении текста: {e}")
+        return ""
+
+def plot_histogram(data, title):
+    plt.hist(data, bins=30, alpha=0.75)
+    plt.title(title)
+    plt.xlabel('Sentiment Score')
+    plt.ylabel('Frequency')
+    plt.show()
+
+# Ницше и Рассела
+nietzsche_url = 'https://www.gutenberg.org/cache/epub/67979/pg67979.txt'
+russell_url = 'https://www.gutenberg.org/cache/epub/75342/pg75342.txt'
+
+nietzsche_text = get_text_from_url(nietzsche_url)
+russell_text = get_text_from_url(russell_url)
+
+# Разделение текста на предложения
+nietzsche_sentences = nietzsche_text.split('.')
+russell_sentences = russell_text.split('.')
+
+# Вычисление сентимента для каждого предложения
+nietzsche_sentiments = [calculate_sentence_sentiment(sentence) for sentence in nietzsche_sentences]
+russell_sentiments = [calculate_sentence_sentiment(sentence) for sentence in russell_sentences]
+
+# Построение гистограмм сентимента
+plot_histogram(nietzsche_sentiments, 'Sentiment Distribution - Nietzsche')
+plot_histogram(russell_sentiments, 'Sentiment Distribution - Russell')
+
+# Комментарий по результатам
+print("Средний сентимент Ницше:", np.mean(nietzsche_sentiments))
+print("Средний сентимент Рассела:", np.mean(russell_sentiments))
+
+# Использование сентимента как признака
+vectorizer = CountVectorizer()
+X_nietzsche = vectorizer.fit_transform(nietzsche_sentences)
+X_russell = vectorizer.transform(russell_sentences)
+
+# Добавление сентимента как признака
+X_nietzsche = np.hstack((X_nietzsche.toarray(), np.array(nietzsche_sentiments).reshape(-1, 1)))
+X_russell = np.hstack((X_russell.toarray(), np.array(russell_sentiments).reshape(-1, 1)))
+
+# Объединение данных и меток
+X = np.vstack((X_nietzsche, X_russell))
+y = np.array([0] * len(nietzsche_sentences) + [1] * len(russell_sentences))
+
+# Обучение модели логистической регрессии
+model = LogisticRegression()
+model.fit(X, y)
+
+# Вычисление коэффициентов и отношения шансов
+coefficients = model.coef_[0]
+sentiment_coefficient = coefficients[-1]
+odds_ratio = np.exp(sentiment_coefficient)
+print(f"Отношение шансов для признака сентимента: {odds_ratio}")
+
+# Интерпретация отношения шансов
+if odds_ratio > 1:
+    print("Положительный сентимент увеличивает вероятность того, что предложение принадлежит Расселу.")
+else:
+    print("Положительный сентимент уменьшает вероятность того, что предложение принадлежит Расселу.")
