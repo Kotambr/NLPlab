@@ -1,0 +1,107 @@
+import re
+import numpy as np
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.model_selection import StratifiedKFold
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score, roc_curve
+import matplotlib.pyplot as plt
+
+def tokenize(text):
+    return re.findall(r'\b\w+\b', text.lower())
+
+def generate_bigrams(text):
+    tokens = tokenize(text)
+    bigrams = [' '.join([tokens[i], tokens[i+1]]) for i in range(len(tokens) - 1)]
+    return bigrams
+
+def calculate_metrics(y_true, y_pred):
+    accuracy = accuracy_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred, average='weighted')
+    recall = recall_score(y_true, y_pred, average='weighted')
+    auc = roc_auc_score(y_true, y_pred, average='weighted', multi_class='ovr')
+    return accuracy, precision, recall, auc
+
+def plot_roc_curve(y_true, y_pred, title):
+    fpr, tpr, _ = roc_curve(y_true, y_pred)
+    plt.plot(fpr, tpr, marker='.')
+    plt.title(title)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.show()
+
+# Пример данных
+texts = [
+    "The quick brown fox jumps over the lazy dog",
+    "Never jump over the lazy dog quickly",
+    "Bright vixens jump; dozy fowl quack",
+    "Quick brown dogs jump over the lazy fox",
+    "The quick brown fox jumps over the lazy dog again",
+    "Never jump over the lazy dog quickly again",
+    "Bright vixens jump; dozy fowl quack again",
+    "Quick brown dogs jump over the lazy fox again",
+    "The quick brown fox jumps over the lazy dog once more",
+    "Never jump over the lazy dog quickly once more"
+]
+labels = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+
+# Генерация биграмм
+vectorizer = CountVectorizer(analyzer=generate_bigrams)
+X = vectorizer.fit_transform(texts)
+y = np.array(labels)
+
+# 5-кратная кросс-валидация
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+accuracies, precisions, recalls, aucs = [], [], [], []
+
+for train_index, test_index in kf.split(X, y):
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+    
+    model = MultinomialNB()
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    
+    accuracy, precision, recall, auc = calculate_metrics(y_test, y_pred)
+    accuracies.append(accuracy)
+    precisions.append(precision)
+    recalls.append(recall)
+    aucs.append(auc)
+
+print(f"Средняя точность: {np.mean(accuracies):.4f} ± {np.std(accuracies):.4f}")
+print(f"Средняя точность: {np.mean(precisions):.4f} ± {np.std(precisions):.4f}")
+print(f"Средняя полнота: {np.mean(recalls):.4f} ± {np.std(recalls):.4f}")
+print(f"Средняя AUC: {np.mean(aucs):.4f} ± {np.std(aucs):.4f}")
+
+# Построение ROC-кривой для одного из разбиений
+plot_roc_curve(y_test, y_pred, "ROC-кривая для Наивного Байеса")
+
+# Создание набора данных, демонстрирующего ограничения Наивного Байеса
+example_texts = [
+    "The quick brown fox jumps over the lazy dog",
+    "The quick brown fox jumps over the lazy dog",
+    "The quick brown fox jumps over the lazy dog",
+    "The quick brown fox jumps over the lazy dog",
+    "The quick brown fox jumps over the lazy dog",
+    "Never jump over the lazy dog quickly",
+    "Never jump over the lazy dog quickly",
+    "Never jump over the lazy dog quickly",
+    "Never jump over the lazy dog quickly",
+    "Never jump over the lazy dog quickly"
+]
+example_labels = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+
+X_example = vectorizer.fit_transform(example_texts)
+y_example = np.array(example_labels)
+
+model_example = MultinomialNB()
+model_example.fit(X_example, y_example)
+y_example_pred = model_example.predict(X_example)
+
+accuracy, precision, recall, auc = calculate_metrics(y_example, y_example_pred)
+print(f"Точность на примере: {accuracy:.4f}")
+print(f"Точность на примере: {precision:.4f}")
+print(f"Полнота на примере: {recall:.4f}")
+print(f"AUC на примере: {auc:.4f}")
+
+# Построение ROC-кривой для примера
+plot_roc_curve(y_example, y_example_pred, "ROC-кривая для примера")
