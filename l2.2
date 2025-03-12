@@ -1,0 +1,115 @@
+import random
+import re
+import requests
+from bs4 import BeautifulSoup
+from collections import defaultdict, Counter
+from sklearn.model_selection import train_test_split
+import numpy as np
+import matplotlib.pyplot as plt
+
+def tokenize(text):
+    return re.findall(r'\b\w+\b', text.lower())
+
+def build_trigram_model(text):
+    tokens = tokenize(text)
+    trigrams = [(tokens[i], tokens[i+1], tokens[i+2]) for i in range(len(tokens) - 2)]
+    model = defaultdict(Counter)
+    for w1, w2, w3 in trigrams:
+        model[(w1, w2)][w3] += 1
+    return model
+
+def laplace_smoothing(model, vocab_size):
+    for context in model:
+        total_count = sum(model[context].values())
+        for word in model[context]:
+            model[context][word] = (model[context][word] + 1) / (total_count + vocab_size)
+    return model
+
+def get_text_from_url(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status() 
+        soup = BeautifulSoup(response.content, 'html.parser')
+        text = soup.get_text()
+        start = text.find("*** START OF THIS PROJECT GUTENBERG EBOOK")
+        end = text.find("*** END OF THIS PROJECT GUTENBERG EBOOK")
+        if start != -1 and end != -1:
+            text = text[start:end]
+        return text
+    except requests.RequestException as e:
+        print(f"Ошибка при получении текста: {e}")
+        return ""
+
+def split_data(text, train_size=0.8):
+    sentences = text.split('.')
+    train_sentences, test_sentences = train_test_split(sentences, train_size=train_size, random_state=42)
+    return ' '.join(train_sentences), ' '.join(test_sentences)
+
+def calculate_sentence_probability(model, sentence):
+    tokens = tokenize(sentence)
+    trigrams = [(tokens[i], tokens[i+1], tokens[i+2]) for i in range(len(tokens) - 2)]
+    log_prob = 0
+    for w1, w2, w3 in trigrams:
+        context = (w1, w2)
+        if context in model and w3 in model[context]:
+            log_prob += np.log(model[context][w3])
+        else:
+            log_prob += np.log(1 / (sum(model[context].values()) + len(model)))
+    return log_prob
+
+def plot_histogram(data, title):
+    plt.hist(data, bins=30, alpha=0.75)
+    plt.title(title)
+    plt.xlabel('Log Probability')
+    plt.ylabel('Frequency')
+    plt.show()
+
+def calculate_perplexity(model, sentences):
+    log_prob_sum = 0
+    word_count = 0
+    for sentence in sentences:
+        tokens = tokenize(sentence)
+        word_count += len(tokens)
+        log_prob_sum += calculate_sentence_probability(model, sentence)
+    return np.exp(-log_prob_sum / word_count)
+
+# Ницше и Рассела
+nietzsche_url = 'https://www.gutenberg.org/cache/epub/67979/pg67979.txt'
+russell_url = 'https://www.gutenberg.org/cache/epub/75342/pg75342.txt'
+
+nietzsche_text = get_text_from_url(nietzsche_url)
+russell_text = get_text_from_url(russell_url)
+
+# Разделение данных на обучающую и тестовую выборки
+nietzsche_train, nietzsche_test = split_data(nietzsche_text)
+russell_train, russell_test = split_data(russell_text)
+
+# Повторное обучение моделей на 80% данных
+nietzsche_model = build_trigram_model(nietzsche_train)
+russell_model = build_trigram_model(russell_train)
+
+# Применение сглаживания Лапласа
+vocab_size = len(set(tokenize(nietzsche_train + russell_train)))
+nietzsche_model = laplace_smoothing(nietzsche_model, vocab_size)
+russell_model = laplace_smoothing(russell_model, vocab_size)
+
+# Оценка моделей на оставшихся 20% данных
+nietzsche_test_sentences = nietzsche_test.split('.')
+russell_test_sentences = russell_test.split('.')
+
+nietzsche_probs_nietzsche_model = [calculate_sentence_probability(nietzsche_model, sentence) for sentence in nietzsche_test_sentences]
+nietzsche_probs_russell_model = [calculate_sentence_probability(russell_model, sentence) for sentence in nietzsche_test_sentences]
+russell_probs_nietzsche_model = [calculate_sentence_probability(nietzsche_model, sentence) for sentence in russell_test_sentences]
+russell_probs_russell_model = [calculate_sentence_probability(russell_model, sentence) for sentence in russell_test_sentences]
+
+# Построение гистограмм
+plot_histogram(nietzsche_probs_nietzsche_model, 'Nietzsche Test Data - Nietzsche Model')
+plot_histogram(nietzsche_probs_russell_model, 'Nietzsche Test Data - Russell Model')
+plot_histogram(russell_probs_nietzsche_model, 'Russell Test Data - Nietzsche Model')
+plot_histogram(russell_probs_russell_model, 'Russell Test Data - Russell Model')
+
+# Вычисление и вывод перплексии
+nietzsche_perplexity = calculate_perplexity(nietzsche_model, nietzsche_test_sentences)
+russell_perplexity = calculate_perplexity(russell_model, russell_test_sentences)
+print(f"Перплексия модели Ницше: {nietzsche_perplexity}")
+print(f"Перплексия модели Рассела: {russell_perplexity}")
